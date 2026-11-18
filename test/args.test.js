@@ -6,7 +6,17 @@ test('по умолчанию 10 запросов', () => {
   assert.deepEqual(parseCliArgs(['https://example.com/a.jpg']), {
     url: 'https://example.com/a.jpg',
     count: 10,
+    timeoutMs: 30_000,
   });
+});
+
+test('принимает --timeout в секундах', () => {
+  assert.equal(parseCliArgs(['https://example.com', '--timeout', '5']).timeoutMs, 5000);
+});
+
+test('ошибка на плохом --timeout', () => {
+  assert.throws(() => parseCliArgs(['https://example.com', '--timeout', '0']), /--timeout/);
+  assert.throws(() => parseCliArgs(['https://example.com', '--timeout', 'abc']), /--timeout/);
 });
 
 test('принимает --count', () => {

@@ -1,4 +1,5 @@
 import { parseArgs } from 'node:util';
+import { DEFAULT_TIMEOUT_MS } from './downloader.js';
 
 export const DEFAULT_COUNT = 10;
 
@@ -7,7 +8,10 @@ export function parseCliArgs(argv) {
   const { values, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
-    options: { count: { type: 'string', short: 'n' } },
+    options: {
+      count: { type: 'string', short: 'n' },
+      timeout: { type: 'string', short: 't' },
+    },
   });
 
   const [rawUrl] = positionals;
@@ -30,5 +34,10 @@ export function parseCliArgs(argv) {
     throw new Error('--count должно быть целым числом >= 1');
   }
 
-  return { url: url.href, count };
+  const timeoutSec = values.timeout === undefined ? DEFAULT_TIMEOUT_MS / 1000 : Number(values.timeout);
+  if (!Number.isFinite(timeoutSec) || timeoutSec <= 0) {
+    throw new Error('--timeout должно быть числом секунд > 0');
+  }
+
+  return { url: url.href, count, timeoutMs: timeoutSec * 1000 };
 }

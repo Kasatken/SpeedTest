@@ -1,24 +1,42 @@
-const DEFAULT_TIMEOUT_MS = 30_000;
+export const DEFAULT_TIMEOUT_MS = 30_000;
 
-/**
- * Скачивает URL и возвращает размер в байтах и время в мс.
- * Единственное место с сетью.
- *
- * Тело читаем потоком, чтобы не держать файл в памяти.
- * Время считаем до последнего байта, а не до заголовков.
- */
+// Качает URL потоком. Таймаут срабатывает, только если данные не идут timeoutMs
 export async function downloadOnce(url, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   const start = performance.now();
+  const controller = new AbortController();
 
-  const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
-  if (!response.ok) {
-    throw new Error(`Сервер ответил ${response.status} ${response.statusText}`);
+  let timer;
+  const resetTimer = () => {
+    clearTimeout(timer);
+    timer = setTimeout(
+      () => controller.abort(new Error(`Таймаут: нет данных ${timeoutMs} мс`)),
+      timeoutMs,
+    );
+  };
+
+  resetTimer();
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Сервер ответил ${response.status} ${response.statusText}`);
+    }
+
+    let bytes = 0;
+    for await (const chunk of response.body) {
+      bytes += chunk.length;
+      resetTimer();
+    }
+
+    return { bytes, ms: performance.now() - start };
+  } catch (error) {
+    throw withCause(error);
+  } finally {
+    clearTimeout(timer);
   }
+}
 
-  let bytes = 0;
-  for await (const chunk of response.body) {
-    bytes += chunk.length;
-  }
-
-  return { bytes, ms: performance.now() - start };
+// fetch прячет причину в error.cause
+function withCause(error) {
+  const cause = error.cause?.code ?? error.cause?.message;
+  return cause ? new Error(`${error.message} (${cause})`) : error;
 }

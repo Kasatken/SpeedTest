@@ -42,3 +42,15 @@ test('ошибка скачивания прерывает прогон', async 
   await assert.rejects(() => runBenchmark({ url: 'http://x', count: 5, download }), /boom/);
   assert.equal(calls, 2);
 });
+
+test('ошибка знает номер запроса и успешные результаты', async () => {
+  let calls = 0;
+  const download = async () => {
+    if (++calls === 3) throw new Error('boom');
+    return { bytes: 1, ms: 1 };
+  };
+  await assert.rejects(
+    () => runBenchmark({ url: 'http://x', count: 5, download }),
+    (error) => /Запрос 3\/5: boom/.test(error.message) && error.results.length === 2,
+  );
+});

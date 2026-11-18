@@ -33,8 +33,37 @@ test('HTTP-ошибка превращается в исключение', async
   await assert.rejects(() => downloadOnce(`${baseUrl}/missing`), /404/);
 });
 
+test('медленная, но живая загрузка не обрывается таймаутом', async () => {
+  const slow = http.createServer((req, res) => {
+    res.writeHead(200);
+    let sent = 0;
+    const timer = setInterval(() => {
+      res.write(Buffer.alloc(10));
+      if (++sent === 10) {
+        clearInterval(timer);
+        res.end();
+      }
+    }, 50);
+  });
+  await new Promise((resolve) => slow.listen(0, '127.0.0.1', resolve));
+  try {
+    const { bytes } = await downloadOnce(`http://127.0.0.1:${slow.address().port}`, { timeoutMs: 200 });
+    assert.equal(bytes, 100);
+  } finally {
+    await new Promise((resolve) => slow.close(resolve));
+  }
+});
+
+test('в ошибке сети есть причина', async () => {
+  const closed = http.createServer();
+  await new Promise((resolve) => closed.listen(0, '127.0.0.1', resolve));
+  const url = `http://127.0.0.1:${closed.address().port}`;
+  await new Promise((resolve) => closed.close(resolve));
+  await assert.rejects(() => downloadOnce(url), /ECONNREFUSED/);
+});
+
 test('таймаут обрывает зависший запрос', async () => {
-  const hanging = http.createServer(() => {}); // принимает запрос и молчит
+  const hanging = http.createServer(() => {});
   await new Promise((resolve) => hanging.listen(0, '127.0.0.1', resolve));
   const url = `http://127.0.0.1:${hanging.address().port}`;
   try {
